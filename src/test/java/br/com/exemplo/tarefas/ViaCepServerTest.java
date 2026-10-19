@@ -40,7 +40,7 @@ public class ViaCepServerTest {
         });
         viaCepStub.start();
 
-        URI baseUri = URI.create("http://127.0.0.1:" + viaCepStub.getAddress().getPort() + "/ws/");
+        URI baseUri = URI.create("http://127.0.0.1:" + viaCepStub.getAddress().getPort() + "/ws");
         servidor = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         executor = Executors.newFixedThreadPool(2);
         servidor.setExecutor(executor);
