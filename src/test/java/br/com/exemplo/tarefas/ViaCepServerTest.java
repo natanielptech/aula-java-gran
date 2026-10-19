@@ -13,6 +13,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -22,16 +23,23 @@ public class ViaCepServerTest {
     private HttpServer servidor;
     private ExecutorService executor;
     private HttpClient client;
+    private final AtomicInteger chamadasViaCep = new AtomicInteger();
 
     @Before
     public void iniciarServidores() throws Exception {
         viaCepStub = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         viaCepStub.createContext("/ws", requisicao -> {
+            chamadasViaCep.incrementAndGet();
             String caminho = requisicao.getRequestURI().getPath();
             int status = caminho.contains("99999999") ? 503 : 200;
-            String corpo = caminho.contains("00000000")
-                    ? "{\"erro\": true}"
-                    : "{\"cep\":\"01001-000\",\"logradouro\":\"Praça da Sé\"}";
+            String corpo;
+            if (caminho.contains("00000000")) {
+                corpo = "{\"erro\": true}";
+            } else if (caminho.contains("22222222")) {
+                corpo = "{\"mensagem\":\"texto com \\\"erro\\\": true\"}";
+            } else {
+                corpo = "{\"cep\":\"01001-000\",\"logradouro\":\"Praça da Sé\"}";
+            }
             byte[] resposta = corpo.getBytes(StandardCharsets.UTF_8);
             requisicao.sendResponseHeaders(status, resposta.length);
             try (var saida = requisicao.getResponseBody()) {
@@ -62,6 +70,7 @@ public class ViaCepServerTest {
 
         assertEquals(400, resposta.statusCode());
         assertTrue(resposta.body().contains("8 dígitos"));
+        assertEquals(0, chamadasViaCep.get());
     }
 
     @Test
@@ -75,8 +84,11 @@ public class ViaCepServerTest {
     @Test
     public void caminhoDesconhecidoRetorna404() throws Exception {
         HttpResponse<String> resposta = requisitar("GET", "/api/cepfoo");
+        HttpResponse<String> metodoInvalido = requisitar("POST", "/api/cepfoo");
 
         assertEquals(404, resposta.statusCode());
+        assertEquals(404, metodoInvalido.statusCode());
+        assertEquals(0, chamadasViaCep.get());
     }
 
     @Test
@@ -93,6 +105,13 @@ public class ViaCepServerTest {
 
         assertEquals(404, resposta.statusCode());
         assertTrue(resposta.body().contains("CEP não encontrado"));
+    }
+
+    @Test
+    public void textoDeErroDentroDeOutraPropriedadeNaoIndicaCepInexistente() throws Exception {
+        HttpResponse<String> resposta = requisitar("GET", "/api/cep/22222222");
+
+        assertEquals(200, resposta.statusCode());
     }
 
     @Test

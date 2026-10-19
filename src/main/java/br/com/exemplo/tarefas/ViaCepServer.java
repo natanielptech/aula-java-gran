@@ -33,7 +33,7 @@ public class ViaCepServer {
     private static final String ERRO_SERVIDOR = "{\"erro\":\"Erro interno do servidor.\"}";
     private static final Pattern CEP_PATTERN = Pattern.compile("\\d{8}");
     private static final Pattern CEP_NAO_ENCONTRADO_PATTERN =
-            Pattern.compile("\"erro\"\\s*:\\s*true(?:\\s*[,}])");
+            Pattern.compile("^\\s*\\{\\s*\"erro\"\\s*:\\s*true\\s*}\\s*$");
     private static final HttpClient CLIENT = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5))
             .build();
@@ -91,14 +91,14 @@ public class ViaCepServer {
         String caminho = requisicao.getRequestURI().getPath();
         String prefixo = ENDPOINT + "/";
 
-        if (!"GET".equals(requisicao.getRequestMethod())) {
-            requisicao.getResponseHeaders().set("Allow", "GET");
-            responder(requisicao, 405, ERRO_METODO);
+        if (!caminho.startsWith(prefixo)) {
+            responder(requisicao, 404, ERRO_ENDPOINT);
             return;
         }
 
-        if (!caminho.startsWith(prefixo)) {
-            responder(requisicao, 404, ERRO_ENDPOINT);
+        if (!"GET".equals(requisicao.getRequestMethod())) {
+            requisicao.getResponseHeaders().set("Allow", "GET");
+            responder(requisicao, 405, ERRO_METODO);
             return;
         }
 
@@ -116,10 +116,11 @@ public class ViaCepServer {
                     .GET()
                     .build();
             resposta = client.send(consulta, HttpResponse.BodyHandlers.ofString());
-        } catch (IOException | InterruptedException e) {
-            if (e instanceof InterruptedException) {
-                Thread.currentThread().interrupt();
-            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            responder(requisicao, 502, ERRO_CONSULTA);
+            return;
+        } catch (IOException e) {
             responder(requisicao, 502, ERRO_CONSULTA);
             return;
         } catch (RuntimeException e) {
