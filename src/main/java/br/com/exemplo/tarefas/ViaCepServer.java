@@ -11,15 +11,33 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.concurrent.Executors;
+import java.util.regex.Pattern;
 
 public class ViaCepServer {
     private static final String ENDPOINT = "/api/cep";
+    private static final String ERRO_CEP_INVALIDO = "{\"erro\":\"Informe um CEP com 8 dígitos.\"}";
+    private static final Pattern CEP_PATTERN = Pattern.compile("\\d{8}");
+    private static final Pattern CEP_NAO_ENCONTRADO_PATTERN =
+            Pattern.compile("\"erro\"\\s*:\\s*true(?:\\s*[,}])");
     private static final HttpClient CLIENT = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5))
             .build();
 
     public static void main(String[] args) throws IOException {
-        int porta = args.length == 0 ? 8080 : Integer.parseInt(args[0]);
+        int porta = 8080;
+        if (args.length > 0) {
+            try {
+                porta = Integer.parseInt(args[0]);
+            } catch (NumberFormatException e) {
+                System.err.println("Porta inválida: informe um número entre 1 e 65535.");
+                return;
+            }
+        }
+        if (porta < 1 || porta > 65535) {
+            System.err.println("Porta inválida: informe um número entre 1 e 65535.");
+            return;
+        }
+
         HttpServer servidor = HttpServer.create(new InetSocketAddress(porta), 0);
         servidor.createContext(ENDPOINT, ViaCepServer::consultarCep);
         servidor.setExecutor(Executors.newFixedThreadPool(10));
@@ -37,14 +55,14 @@ public class ViaCepServer {
             return;
         }
 
-        if (!caminho.startsWith(prefixo) || caminho.length() != prefixo.length() + 8) {
-            responder(requisicao, 400, "{\"erro\":\"Informe um CEP com 8 dígitos.\"}");
+        if (!caminho.startsWith(prefixo)) {
+            responder(requisicao, 400, ERRO_CEP_INVALIDO);
             return;
         }
 
         String cep = caminho.substring(prefixo.length());
-        if (!cep.matches("\\d{8}")) {
-            responder(requisicao, 400, "{\"erro\":\"Informe um CEP com 8 dígitos.\"}");
+        if (!CEP_PATTERN.matcher(cep).matches()) {
+            responder(requisicao, 400, ERRO_CEP_INVALIDO);
             return;
         }
 
@@ -57,7 +75,11 @@ public class ViaCepServer {
         try {
             HttpResponse<String> resposta = CLIENT.send(consulta, HttpResponse.BodyHandlers.ofString());
             if (resposta.statusCode() >= 200 && resposta.statusCode() < 300) {
-                responder(requisicao, 200, resposta.body());
+                if (CEP_NAO_ENCONTRADO_PATTERN.matcher(resposta.body()).find()) {
+                    responder(requisicao, 404, "{\"erro\":\"CEP não encontrado.\"}");
+                } else {
+                    responder(requisicao, 200, resposta.body());
+                }
             } else {
                 responder(requisicao, 502, "{\"erro\":\"O serviço ViaCEP retornou um erro.\"}");
             }
