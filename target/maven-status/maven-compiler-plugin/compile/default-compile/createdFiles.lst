@@ -1,0 +1,4 @@
+br/com/exemplo/tarefas/Main.class
+br/com/exemplo/tarefas/TarefaDAO.class
+br/com/exemplo/tarefas/Tarefa.class
+br/com/exemplo/tarefas/Conexao.class
